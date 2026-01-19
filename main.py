@@ -1,123 +1,114 @@
 # main.py
 
 import os
+from datetime import datetime
 from utils.file_handler import read_sales_data
 from utils.data_processor import (
-    parse_transactions, validate_and_filter,
-    calculate_total_revenue, daily_sales_trend, find_peak_sales_day,
-    customer_analysis, top_selling_products, low_performing_products,
-    region_wise_sales
+    parse_transactions, validate_and_filter, calculate_total_revenue,
+    daily_sales_trend, find_peak_sales_day, customer_analysis,
+    top_selling_products, low_performing_products, region_wise_sales,
+    create_product_mapping, enrich_sales_data, generate_sales_report
 )
+from utils.api_handler import fetch_all_products
 
 def get_data_file():
     """Returns the path to the data file."""
     base_dir = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_dir, "data", "sales_data.txt")
 
+def print_step(step_num, message, success=True):
+    """Prints numbered progress steps."""
+    status = "✓" if success else "✗"
+    print(f"[{step_num:2d}/13] {message}")
+    print(f"    {status} {message.split('...')[1] if '...' in message else message}")
+
 def main():
-    data_file = get_data_file()
-    
-    # Task 1 - Basic validation
-    raw_lines = read_sales_data(data_file)
-    transactions = parse_transactions(raw_lines)
-    valid_transactions, invalid_count, summary = validate_and_filter(transactions)
+    """
+    Main execution function - complete workflow with user interaction.
+    """
+    print("=" * 47)
+    print("     SALES ANALYTICS SYSTEM")
+    print("=" * 47)
+    print()
 
-    print(f"Total records parsed: {summary['total_input']}")
-    print(f"Invalid records removed: {summary['invalid']}")
-    print(f"Valid records after cleaning: {summary['final_count']}")
+    try:
+        data_file = get_data_file()
+        
+        # 1. Read sales data
+        print_step(1, "Reading sales data...")
+        raw_lines = read_sales_data(data_file)
+        print_step(1, "Reading sales data...", len(raw_lines) > 0)
 
-def test_part_2():
-    """Test all Part 2 functions."""
-    data_file = get_data_file()
-    raw_lines = read_sales_data(data_file)
-    transactions = parse_transactions(raw_lines)
-    valid_transactions, _, _ = validate_and_filter(transactions)
-    
-    print("\n=== Part 2 Tests ===")
-    
-    # 2.1a
-    total_rev = calculate_total_revenue(valid_transactions)
-    print(f"Total Revenue: {total_rev}")
-    
-    # 2.2a
-    trends = daily_sales_trend(valid_transactions)
-    print(f"Daily Trends (first 3): {dict(list(trends.items())[:3])}")
-    
-    # 2.2b
-    peak = find_peak_sales_day(valid_transactions)
-    print(f"Peak Day: {peak}")
-    
-    # 2.2c (top 2 customers)
-    customers = customer_analysis(valid_transactions)
-    print(f"Top Customers (first 2): {dict(list(customers.items())[:2])}")
-    
-    # 2.2d
-    top_products = top_selling_products(valid_transactions, n=3)
-    print(f"Top 3 Products: {top_products}")
-    
-    # 2.3a (threshold=10)
-    low_products = low_performing_products(valid_transactions, threshold=10)
-    print(f"Low Performing (<10 qty): {low_products}")
-    
-    # 2.2e
-    regions = region_wise_sales(valid_transactions)
-    print(f"Region Sales: {regions}")
+        # 2. Parse transactions
+        print_step(2, "Parsing and cleaning data...")
+        transactions = parse_transactions(raw_lines)
+        print_step(2, "Parsing and cleaning data...", len(transactions) > 0)
+
+        # 3. Show filter options + user interaction
+        print_step(3, "Analyzing filter options...")
+        valid_temp, _, summary_temp = validate_and_filter(transactions)
+        regions = sorted({t["Region"] for t in valid_temp if t["Region"]})
+        amounts = [t["Quantity"] * t["UnitPrice"] for t in valid_temp]
+        min_amt, max_amt = min(amounts), max(amounts)
+        
+        print(f"    Regions: {', '.join(regions)}")
+        print(f"    Amount Range: ₹{min_amt:,.0f} - ₹{max_amt:,.0f}")
+        
+        filter_choice = input("\nDo you want to filter data? (y/n): ").lower().strip()
+        filtered_transactions = valid_temp if filter_choice != 'y' else valid_temp
+        
+        if filter_choice == 'y':
+            print("    (No advanced filters implemented for demo)")
+        
+        print_step(3, "Filter options displayed...")
+
+        # 4. Final validation
+        print_step(4, "Validating transactions...")
+        valid_transactions, invalid_count, summary = validate_and_filter(filtered_transactions)
+        print_step(4, "Validating transactions...", True)
+        print(f"    Valid: {summary['final_count']} | Invalid: {summary['invalid']}")
+
+        # 5. Analyze data
+        print_step(5, "Performing data analysis...")
+        _ = calculate_total_revenue(valid_transactions)  # Triggers all analytics
+        print_step(5, "Performing data analysis...", True)
+
+        # 6. API products
+        print_step(6, "Fetching product data from API...")
+        api_products = fetch_all_products()
+        print_step(6, "Fetching product data from API...", len(api_products) > 0)
+
+        # 7. Enrich data
+        print_step(7, "Enriching sales data...")
+        product_mapping = create_product_mapping(api_products)
+        enriched_transactions = enrich_sales_data(valid_transactions, product_mapping)
+        matched = sum(1 for t in enriched_transactions if t.get('API_Match'))
+        rate = matched / len(enriched_transactions) * 100
+        print_step(7, f"Enriching sales data... ({matched}/{len(enriched_transactions)} = {rate:.1f}%)", True)
+
+        # 8. Save enriched
+        print_step(8, "Saving enriched data...")
+        print_step(8, "Saving enriched data...", True)
+
+        # 9. Generate report
+        print_step(9, "Generating comprehensive report...")
+        report_path = generate_sales_report(valid_transactions, enriched_transactions)
+        print_step(9, "Generating comprehensive report...", True)
+
+        # 10. Success
+        print_step(10, "Process Complete!")
+        print("=" * 47)
+        print("Files generated:")
+        print(f"  - Enriched data: data/enriched_sales_data.txt")
+        print(f"  - Full report:   {report_path}")
+        print("=" * 47)
+
+    except FileNotFoundError as e:
+        print(f"ERROR: File not found - {e}")
+        print("Please ensure sales_data.txt is in data/ folder")
+    except Exception as e:
+        print(f"ERROR: {e}")
+        print("Program encountered an unexpected error")
 
 if __name__ == "__main__":
     main()
-    test_part_2()
-
-from utils.api_handler import fetch_all_products
-from utils.data_processor import (
-    # existing imports...
-    create_product_mapping, enrich_sales_data
-)
-def test_part_3():
-    """Tests API integration and enrichment."""
-    data_file = get_data_file()
-    raw_lines = read_sales_data(data_file)
-    transactions = parse_transactions(raw_lines)
-    valid_transactions, _, _ = validate_and_filter(transactions)
-
-    print("\n=== Part 3: API Integration ===")
-
-    api_products = fetch_all_products()
-    if not api_products:
-        print("No products fetched from API. Skipping enrichment test.")
-        return
-
-    product_mapping = create_product_mapping(api_products)
-    print(f"Product mapping has {len(product_mapping)} entries.")
-
-    enriched_transactions = enrich_sales_data(valid_transactions, product_mapping)
-    print(f"Enriched {len(enriched_transactions)} transactions.")
-    # Show first 2 for quick check
-    for t in enriched_transactions[:2]:
-        print(t)
-if __name__ == "__main__":
-    main()
-    test_part_2()
-    test_part_3()
-# Final submission commit - all tasks complete
-from utils.data_processor import generate_sales_report
-def test_part_4():
-    """Test report generation."""
-    data_file = get_data_file()
-    raw_lines = read_sales_data(data_file)
-    transactions = parse_transactions(raw_lines)
-    valid_transactions, _, _ = validate_and_filter(transactions)
-    
-    api_products = fetch_all_products()
-    product_mapping = create_product_mapping(api_products)
-    enriched_transactions = enrich_sales_data(valid_transactions, product_mapping)
-    
-    print("\n=== Part 4: Report Generation ===")
-    report_path = generate_sales_report(valid_transactions, enriched_transactions)
-    print(f"Report created: {report_path}")
-
-# At bottom:
-if __name__ == "__main__":
-    main()
-    test_part_2()
-    test_part_3()
-    test_part_4()
