@@ -99,3 +99,25 @@ if __name__ == "__main__":
     test_part_2()
     test_part_3()
 # Final submission commit - all tasks complete
+from utils.data_processor import generate_sales_report
+def test_part_4():
+    """Test report generation."""
+    data_file = get_data_file()
+    raw_lines = read_sales_data(data_file)
+    transactions = parse_transactions(raw_lines)
+    valid_transactions, _, _ = validate_and_filter(transactions)
+    
+    api_products = fetch_all_products()
+    product_mapping = create_product_mapping(api_products)
+    enriched_transactions = enrich_sales_data(valid_transactions, product_mapping)
+    
+    print("\n=== Part 4: Report Generation ===")
+    report_path = generate_sales_report(valid_transactions, enriched_transactions)
+    print(f"Report created: {report_path}")
+
+# At bottom:
+if __name__ == "__main__":
+    main()
+    test_part_2()
+    test_part_3()
+    test_part_4()

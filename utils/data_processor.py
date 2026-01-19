@@ -423,3 +423,122 @@ def enrich_sales_data(transactions, product_mapping):
     save_enriched_data(enriched)
 
     return enriched
+import os
+from datetime import datetime
+
+def format_currency(amount):
+    """Formats number with commas: 1234567.89 -> 1,234,567.89"""
+    return f"{amount:,.2f}"
+
+def generate_sales_report(transactions, enriched_transactions, output_file='output/sales_report.txt'):
+    """
+    Generates a comprehensive formatted text report.
+    Creates output/sales_report.txt with all 8 sections.
+    """
+    # Ensure output directory exists
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    filepath = os.path.join(base_dir, output_file)
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+
+    # Pre-calculate all metrics
+    total_revenue = calculate_total_revenue(transactions)
+    region_stats = region_wise_sales(transactions)
+    top_products = top_selling_products(transactions, n=5)
+    customer_stats = customer_analysis(transactions)
+    daily_trends = daily_sales_trend(transactions)
+    peak_day = find_peak_sales_day(transactions)
+    low_products = low_performing_products(transactions, threshold=10)
+
+    # API enrichment summary
+    total_enriched = len(enriched_transactions)
+    matched_count = sum(1 for t in enriched_transactions if t.get('API_Match', False))
+    success_rate = (matched_count / total_enriched * 100) if total_enriched > 0 else 0
+    unmatched_pids = set(t['ProductID'] for t in enriched_transactions if not t.get('API_Match', False))
+
+    # Date range
+    dates = sorted({t['Date'] for t in transactions})
+    date_range = f"{dates[0]} to {dates[-1]}" if dates else "No data"
+
+    # Average order value
+    avg_order_value = total_revenue / len(transactions) if transactions else 0
+
+    with open(filepath, 'w', encoding='utf-8') as f:
+        # 1. HEADER
+        f.write("=" * 55 + "\n")
+        f.write("       SALES ANALYTICS REPORT\n")
+        f.write(f"   Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"   Records Processed: {len(transactions)}\n")
+        f.write("=" * 55 + "\n\n")
+
+        # 2. OVERALL SUMMARY
+        f.write("OVERALL SUMMARY\n")
+        f.write("-" * 40 + "\n")
+        f.write(f"Total Revenue:        ₹{format_currency(total_revenue)}\n")
+        f.write(f"Total Transactions:   {len(transactions)}\n")
+        f.write(f"Average Order Value:  ₹{format_currency(avg_order_value)}\n")
+        f.write(f"Date Range:           {date_range}\n\n")
+
+        # 3. REGION-WISE PERFORMANCE
+        f.write("REGION-WISE PERFORMANCE\n")
+        f.write("-" * 40 + "\n")
+        f.write(f"{'Region':<10} {'Sales':<12} {'% Total':<10} {'Transactions':<12}\n")
+        f.write("-" * 40 + "\n")
+        for region, stats in region_stats.items():
+            pct = f"{stats['percentage']:.1f}%"
+            f.write(f"{region:<10} ₹{format_currency(stats['total_sales']):<12} {pct:<10} {stats['transaction_count']:<12}\n")
+        f.write("\n")
+
+        # 4. TOP 5 PRODUCTS
+        f.write("TOP 5 PRODUCTS\n")
+        f.write("-" * 40 + "\n")
+        f.write(f"{'Rank':<5} {'Product Name':<20} {'Qty Sold':<10} {'Revenue':<12}\n")
+        f.write("-" * 40 + "\n")
+        for i, (name, qty, rev) in enumerate(top_products, 1):
+            f.write(f"{i:<5} {name:<20} {qty:<10} ₹{format_currency(rev):<12}\n")
+        f.write("\n")
+
+        # 5. TOP 5 CUSTOMERS
+        f.write("TOP 5 CUSTOMERS\n")
+        f.write("-" * 40 + "\n")
+        f.write(f"{'Rank':<5} {'Customer ID':<12} {'Total Spent':<15} {'Order Count':<12}\n")
+        f.write("-" * 40 + "\n")
+        top_customers = list(customer_stats.items())[:5]
+        for i, (cid, stats) in enumerate(top_customers, 1):
+            f.write(f"{i:<5} {cid:<12} ₹{format_currency(stats['total_spent']):<15} {stats['transaction_count']:<12}\n")
+        f.write("\n")
+
+        # 6. DAILY SALES TREND (first 10 days)
+        f.write("DAILY SALES TREND (Top 10 Days)\n")
+        f.write("-" * 50 + "\n")
+        f.write(f"{'Date':<12} {'Revenue':<15} {'Transactions':<12} {'Unique Customers':<15}\n")
+        f.write("-" * 50 + "\n")
+        top_days = sorted(daily_trends.items(), key=lambda x: x[1]['revenue'], reverse=True)[:10]
+        for date, stats in top_days:
+            f.write(f"{date:<12} ₹{format_currency(stats['revenue']):<15} {stats['transaction_count']:<12} {stats['unique_customers']:<15}\n")
+        f.write("\n")
+
+        # 7. PRODUCT PERFORMANCE ANALYSIS
+        f.write("PRODUCT PERFORMANCE ANALYSIS\n")
+        f.write("-" * 40 + "\n")
+        if peak_day:
+            f.write(f"Best Selling Day: {peak_day[0]} (₹{format_currency(peak_day[1])}, {peak_day[2]} transactions)\n")
+        if low_products:
+            f.write("Low Performing Products (<10 qty):\n")
+            for name, qty, rev in low_products[:5]:
+                f.write(f"  {name}: {qty} units (₹{format_currency(rev)})\n")
+        f.write("\n")
+
+        # 8. API ENRICHMENT SUMMARY
+        f.write("API ENRICHMENT SUMMARY\n")
+        f.write("-" * 40 + "\n")
+        f.write(f"Total Enriched:        {total_enriched}\n")
+        f.write(f"Successfully Matched:  {matched_count}\n")
+        f.write(f"Success Rate:          {success_rate:.1f}%\n")
+        if unmatched_pids:
+            f.write(f"Unmatched Product IDs: {', '.join(sorted(unmatched_pids))[:100]}...\n")
+        f.write("\n")
+
+        f.write("Report generated successfully.\n")
+
+    print(f"Sales report saved to {filepath}")
+    return filepath
